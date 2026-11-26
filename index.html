@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<title>Pembuat Paket Peta GMAP</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:14px;background:#0f172a;color:#e2e8f0;max-width:560px;margin:auto}
+h1{font-size:19px;margin:0 0 10px}label{display:block;margin:9px 0 3px;font-size:13px;color:#94a3b8}
+input,select,button{font:inherit;padding:9px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;width:100%;box-sizing:border-box}
+.r{display:flex;gap:8px}.r>*{flex:1}.c{display:flex;align-items:center;gap:8px;margin:6px 0}.c input{width:auto}
+button{background:#16a34a;border-color:#16a34a;margin-top:10px;font-weight:600}button.s{background:#1e293b;border-color:#334155}
+#log{font:12px monospace;white-space:pre-wrap;background:#020617;border-radius:8px;padding:8px;margin-top:10px;max-height:220px;overflow:auto}
+canvas{width:100%;background:#f1efe8;border-radius:8px;margin-top:10px}small{color:#64748b}
+</style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script></head><body>
+<h1>Pembuat Paket Peta GMAP (jalan lengkap)</h1>
+<div class="r"><div><label>Lintang (lat)</label><input id="lat" value="-7.3331" inputmode="decimal"></div>
+<div><label>Bujur (lon)</label><input id="lon" value="111.0719" inputmode="decimal"></div></div>
+<button class="s" id="gps">Pakai lokasi HP</button>
+<label>Mode</label><select id="mode"><option value="r">Radius dari satu titik</option><option value="n">Navigasi (rute asal → tujuan)</option></select>
+<div id="pickBox"><div class="r" id="pkRow" style="display:none"><button class="s" id="pkF">Ketuk peta = Asal</button><button class="s" id="pkT">Ketuk peta = Tujuan ✓</button></div>
+<div id="navMap" style="height:320px;border-radius:8px;margin-top:8px;background:#1e293b"></div>
+<div style="font-size:12px;opacity:.7;margin:4px 0">Mode Radius: ketuk peta untuk memilih titik pusat.</div>
+<details id="tkBox" style="margin:6px 0"><summary style="font-size:13px;color:#94a3b8;cursor:pointer">Sumber tile peta pilih titik (API key Carto)</summary>
+<label>Sumber</label><select id="tkSrc"><option value="osm">OpenStreetMap (tanpa key)</option><option value="carto">Carto Voyager (butuh API key)</option></select>
+<label>API key Carto</label><input id="tkKey" placeholder="tempel API key dari carto.com/basemaps" autocomplete="off">
+<label>Template URL tile (biarkan tulisan {key} apa adanya; jangan diganti dengan key)</label><input id="tkUrl">
+<button class="s" id="tkApply" type="button">Terapkan &amp; simpan</button>
+<small id="tkMsg">Kunci hanya disimpan di browser HP ini. Hanya memengaruhi tampilan peta pilih titik; warna file .gmap diatur lewat Tipe peta.</small></details></div>
+<div id="navBox" style="display:none"><label>Asal (nama tempat atau lat,lon; kosong = lokasi HP)</label><input id="from">
+<label>Tujuan (nama tempat atau lat,lon)</label><input id="to">
+<div class="c"><input type="checkbox" id="notoll" checked><span>Hindari tol</span></div>
+<label>Lebar peta kiri-kanan rute</label><select id="buf"><option value="2000">2 km</option><option value="3000" selected>3 km</option><option value="5000">5 km</option></select>
+<button class="s" id="rt">Cari rute</button><div id="rtinfo" style="font-size:13px;margin:6px 0"></div></div>
+<label>Tipe peta (gaya warna + isi lapisan)</label><select id="sty"><option value="0">Standar (mirip Carto)</option><option value="1">Malam (gelap)</option><option value="2">Kontras siang</option><option value="3">Alam / offroad</option><option value="4" selected>Carto Voyager (berwarna)</option></select>
+<div class="r"><div><label>Radius (km)</label><input id="rad" type="number" value="10" min="1" max="30" step="1"></div>
+<div><label>Ukuran sel</label><select id="cell"><option value="9000" selected>1 km (tabel kecil)</option><option value="4500">0,5 km (sel padat)</option></select></div></div>
+<label>Simplifikasi garis (meter) — makin kecil makin detail, berkas makin besar</label><input id="tol" type="number" value="3" min="1" max="15" step="0.5">
+<div class="c"><input type="checkbox" id="trk" checked><span>Jalan tanah / track</span></div>
+<div class="c"><input type="checkbox" id="pth"><span>Jalan setapak (path, footway) — gang sempit</span></div>
+<div class="c"><input type="checkbox" id="stm" checked><span>Sungai kecil (stream)</span></div>
+<div class="c"><input type="checkbox" id="dit"><span>Parit / saluran irigasi</span></div>
+<div class="c"><input type="checkbox" id="ar" checked><span>Area berwarna: air, hutan, taman</span></div>
+<div class="c"><input type="checkbox" id="fm" checked><span>Area sawah / ladang</span></div>
+<div class="c"><input type="checkbox" id="bt"><span>Area permukiman / industri (abu-abu)</span></div>
+<button id="go">Buat paket peta</button>
+<div id="log"></div>
+<canvas id="cv" width="560" height="560" style="display:none"></canvas>
+<button class="s" id="dl" style="display:none">Unduh map.gmap</button>
+<button class="s" id="up" style="display:none">Kirim langsung ke ESP32 (WiFi GESITS-MAP)</button>
+<small>Data: OpenStreetMap contributors (ODbL), tile pilih titik: © CARTO. Unggah manual: sambung ke WiFi GESITS-MAP lalu buka http://192.168.4.1 dan pilih berkas map.gmap.</small>
+
+<script id="core">
+const MLAT=110574, CELL_MAX_BYTES=8000;
+function classOf(t,o){
+  if(t.highway){const h=t.highway.replace(/_link$/,'');
+    if(h==='motorway'||h==='trunk')return 0; if(h==='primary')return 1; if(h==='secondary')return 2; if(h==='tertiary')return 3;
+    if(['residential','unclassified','living_street','road'].includes(h))return 4;
+    if(h==='service'||(h==='track'&&o.track))return 5;
+    if(o.paths&&['path','footway','cycleway','bridleway','pedestrian'].includes(h))return 5;
+    return -1;}
+  if(t.waterway){if(t.waterway==='river'||t.waterway==='canal')return 6; if(t.waterway==='stream'&&o.streams)return 6;
+    if((t.waterway==='drain'||t.waterway==='ditch')&&o.ditch)return 6; return -1;}
+  if(t.railway==='rail')return 7;
+  return -1;}
+function areaClass(t,o){
+  if(!o.areas)return -1;
+  if(t.natural==='water'||t.waterway==='riverbank'||t.landuse==='reservoir'||t.landuse==='basin')return 8;
+  if(t.natural==='wood'||t.landuse==='forest')return 9;
+  if(['park','garden','pitch','golf_course','nature_reserve','playground'].includes(t.leisure)||['grass','meadow','village_green','recreation_ground','orchard','vineyard','plant_nursery','allotments'].includes(t.landuse)||['scrub','grassland','heath'].includes(t.natural))return 10;
+  if(o.farm&&t.landuse==='farmland')return 10;
+  if(o.built&&['residential','commercial','industrial','retail','construction','garages'].includes(t.landuse))return 11;
+  return -1;}
+const peq=(a,b)=>a[0]===b[0]&&a[1]===b[1];
+function assembleRings(members){const segs=members.filter(m=>m.length>1).map(m=>m.slice()),rings=[];
+  while(segs.length){let cur=segs.pop(),guard=0;
+    while(!(cur.length>3&&peq(cur[0],cur[cur.length-1]))&&guard++<5000){const end=cur[cur.length-1];let f=-1,rev=false;
+      for(let i=0;i<segs.length;i++){if(peq(segs[i][0],end)){f=i;break}if(peq(segs[i][segs[i].length-1],end)){f=i;rev=true;break}}
+      if(f<0)break;const nx=segs.splice(f,1)[0];if(rev)nx.reverse();cur=cur.concat(nx.slice(1))}
+    if(cur.length>3&&peq(cur[0],cur[cur.length-1]))rings.push(cur)}
+  return rings}
+function clipRect(pts,x0,y0,x1,y1){let out=pts;
+  for(const [ax,b,sd] of [[0,x0,1],[0,x1,-1],[1,y0,1],[1,y1,-1]]){const inp=out;out=[];if(!inp.length)break;
+    const ins=p=>sd>0?p[ax]>=b:p[ax]<=b;
+    for(let i=0;i<inp.length;i++){const a=inp[i],c=inp[(i+1)%inp.length],ia=ins(a),ic=ins(c);
+      if(ia)out.push(a);
+      if(ia!==ic){const t=(b-a[ax])/(c[ax]-a[ax]),q=[0,0];q[ax]=b;q[1-ax]=a[1-ax]+t*(c[1-ax]-a[1-ax]);out.push(q)}}}
+  return out}
+// Poligon (cincin tertutup, mikro-derajat relatif origin) -> dipotong per sel, maks 200 titik per potongan
+function addPolygon(ring,cls,cell,cols,rows,cells,kx,ky,tol){
+  if(ring.length>1&&peq(ring[0],ring[ring.length-1]))ring=ring.slice(0,-1);
+  if(ring.length<3)return;
+  let minx=1e18,maxx=-1e18,miny=1e18,maxy=-1e18;for(const p of ring){if(p[0]<minx)minx=p[0];if(p[0]>maxx)maxx=p[0];if(p[1]<miny)miny=p[1];if(p[1]>maxy)maxy=p[1]}
+  if((maxx-minx)*kx<8&&(maxy-miny)*ky<8)return;
+  const cx0=Math.max(0,Math.floor(minx/cell)),cx1=Math.min(cols-1,Math.floor(maxx/cell)),cy0=Math.max(0,Math.floor(miny/cell)),cy1=Math.min(rows-1,Math.floor(maxy/cell));
+  for(let cy=cy0;cy<=cy1;cy++)for(let cx=cx0;cx<=cx1;cx++){
+    let c=clipRect(ring,cx*cell,cy*cell,(cx+1)*cell,(cy+1)*cell).map(p=>[Math.round(p[0]),Math.round(p[1])]);
+    c=c.filter((p,i)=>i===0||p[0]!==c[i-1][0]||p[1]!==c[i-1][1]);
+    if(c.length>1&&peq(c[0],c[c.length-1]))c.pop();
+    if(c.length<3)continue;
+    let t=tol;while(c.length>200&&t<300){const m=c.concat([c[0]]).map(q=>[q[0]*kx,q[1]*ky,q[0],q[1]]);c=dp(m,t).map(q=>[q[2],q[3]]);c.pop();t*=2}
+    if(c.length<3||c.length>200)continue;
+    (cells[cy*cols+cx]||(cells[cy*cols+cx]=[])).push({cls,poly:c,name:'',isPoly:true})}}
+function dp(P,tol){const n=P.length;if(n<3)return P.slice();const keep=new Uint8Array(n);keep[0]=keep[n-1]=1;const st=[[0,n-1]];
+  while(st.length){const[a,b]=st.pop();let md=0,mi=-1;const ax=P[a][0],ay=P[a][1],dx=P[b][0]-ax,dy=P[b][1]-ay,L=Math.hypot(dx,dy);
+    for(let i=a+1;i<b;i++){const d=L===0?Math.hypot(P[i][0]-ax,P[i][1]-ay):Math.abs(dy*(P[i][0]-ax)-dx*(P[i][1]-ay))/L;if(d>md){md=d;mi=i}}
+    if(md>tol&&mi>0){keep[mi]=1;st.push([a,mi],[mi,b])}}
+  return P.filter((_,i)=>keep[i]);}
+// Potong satu garis (x,y dalam mikro-derajat relatif origin) menjadi potongan per sel
+function splitToCells(poly,cls,cell,cols,rows,cells,name){let last=null;
+  for(let i=1;i<poly.length;i++){const x0=poly[i-1][0],y0=poly[i-1][1],x1=poly[i][0],y1=poly[i][1],dx=x1-x0,dy=y1-y0,ts=[0,1];
+    if(dx!==0){const a=Math.floor(Math.min(x0,x1)/cell)+1,b=Math.floor(Math.max(x0,x1)/cell);for(let g=a;g<=b;g++){const t=(g*cell-x0)/dx;if(t>0&&t<1)ts.push(t)}}
+    if(dy!==0){const a=Math.floor(Math.min(y0,y1)/cell)+1,b=Math.floor(Math.max(y0,y1)/cell);for(let g=a;g<=b;g++){const t=(g*cell-y0)/dy;if(t>0&&t<1)ts.push(t)}}
+    ts.sort((p,q)=>p-q);
+    for(let k=1;k<ts.length;k++){const ta=ts[k-1],tb=ts[k];if(tb-ta<1e-9)continue;
+      const sx=Math.round(x0+dx*ta),sy=Math.round(y0+dy*ta),ex=Math.round(x0+dx*tb),ey=Math.round(y0+dy*tb);
+      const cx=Math.floor((x0+dx*(ta+tb)/2)/cell),cy=Math.floor((y0+dy*(ta+tb)/2)/cell);
+      if(cx<0||cy<0||cx>=cols||cy>=rows){last=null;continue}
+      if(sx===ex&&sy===ey)continue;
+      const ci=cy*cols+cx;
+      if(last&&last.ci===ci&&last.ex===sx&&last.ey===sy&&last.poly.length<1500){last.poly.push([ex,ey])}
+      else{const poly=[[sx,sy],[ex,ey]];(cells[ci]||(cells[ci]=[])).push({cls,poly,name});last={ci,poly}}
+      last.ex=ex;last.ey=ey;}}}
+function cellBytes(list){let b=0;for(const r of list)b+=4+4*r.poly.length;return b}
+// ways: [{cls, pts:[[lat,lon],...]}]  ->  {bytes, stats}
+const ASCII=s=>(s||'').replace(/[^\x20-\x7e]/g,'').replace(/\s+/g,' ').trim().slice(0,40);
+function buildGmap(ways,cfg,places){
+  const latC=cfg.latC,lonC=cfg.lonC,R=cfg.radiusM,cell=cfg.cellE6,mLon=111320*Math.cos(latC*Math.PI/180);
+  const oLat=Math.round((latC-R/MLAT)*1e6),oLon=Math.round((lonC-R/mLon)*1e6);
+  const rows=Math.ceil(2*R/MLAT*1e6/cell),cols=Math.ceil(2*R/mLon*1e6/cell);
+  if(cols*rows>40000)throw new Error('Terlalu banyak sel ('+cols*rows+'). Kurangi radius atau pakai sel 1 km.');
+  const kx=mLon/1e6,ky=MLAT/1e6;
+  const pre=ways.map(w=>({cls:w.cls,poly:!!w.poly,name:w.cls<=5?ASCII(w.name):'',p:w.pts.map(q=>[Math.round(q[1]*1e6)-oLon,Math.round(q[0]*1e6)-oLat])}));
+  let tol=cfg.tolM,cells,dropped=0,passes=0;
+  for(;;){cells=[];passes++;
+    for(const w of pre){const m=w.p.map(q=>[q[0]*kx,q[1]*ky,q[0],q[1]]);
+      const s=dp(m,tol).map(q=>[q[2],q[3]]);
+      if(w.poly)addPolygon(s,w.cls,cell,cols,rows,cells,kx,ky,tol);
+      else if(s.length>=2)splitToCells(s,w.cls,cell,cols,rows,cells,w.name);}
+    let worst=0;for(const l of cells)if(l)worst=Math.max(worst,cellBytes(l));
+    if(worst<=CELL_MAX_BYTES||passes>=4)break;
+    tol*=1.6;}
+  for(let ci=0;ci<cells.length;ci++){const l=cells[ci];if(!l)continue;
+    l.sort((a,b)=>((b.isPoly?1:0)-(a.isPoly?1:0))||(a.isPoly?b.cls-a.cls:0));   // poligon dulu (terbangun, hijau, hutan, air), lalu garis
+    for(const drop of [11,10,5,4,9]){if(cellBytes(l)<=CELL_MAX_BYTES)break;
+      for(let i=l.length-1;i>=0;i--)if(l[i].cls===drop){l.splice(i,1);dropped++}}}
+  // indeks nama lokal per sel (1..255; 0 = tanpa nama). Daftar nama per sel disimpan di bagian 'nama' (akhir berkas).
+  const namesOf=[];
+  for(let ci=0;ci<cells.length;ci++){const l=cells[ci];if(!l)continue;const idx=new Map(),list=[];let bytes=1;
+    for(const r of l){r.nameIdx=0;if(!r.name||r.cls>5)continue;
+      if(!idx.has(r.name)){if(list.length>=255||bytes+1+r.name.length>700)continue;list.push(r.name);idx.set(r.name,list.length);bytes+=1+r.name.length}
+      r.nameIdx=idx.get(r.name)}
+    namesOf[ci]=list}
+  // serialisasi
+  const tableOff=32,dataOff=32+cols*rows*8;let total=0,maxCell=0,nRec=0;const byCls=new Array(12).fill(0);
+  for(const l of cells)if(l){const b=cellBytes(l);total+=b;maxCell=Math.max(maxCell,b);nRec+=l.length;for(const r of l)byCls[r.cls]+=r.poly.length-1}
+  const dataEnd=dataOff+total;
+  // ---- bagian nama (tambahan; renderer lama mengabaikannya) ----
+  const pl=(places||[]).map(q=>({lat:Math.round(q.lat*1e6),lon:Math.round(q.lon*1e6),rank:q.rank,name:ASCII(q.name)})).filter(q=>q.name).sort((a,b)=>b.rank-a.rank).slice(0,400);
+  const nTabOff=dataEnd,nTabLen=cols*rows*8;let nBlobLen=0;for(const l of namesOf)if(l&&l.length)nBlobLen+=1+l.reduce((s,n)=>s+1+n.length,0);
+  const placesOff=nTabOff+nTabLen+nBlobLen;let placesLen=0;for(const q of pl)placesLen+=10+q.name.length;
+  const out=new Uint8Array(placesOff+placesLen+16),dv=new DataView(out.buffer);
+  out.set([71,77,80,49],0);dv.setUint32(4,out.length,true);dv.setInt32(8,oLat,true);dv.setInt32(12,oLon,true);
+  dv.setUint16(16,cell,true);dv.setUint16(18,cols,true);dv.setUint16(20,rows,true);dv.setUint32(22,tableOff,true);dv.setUint32(26,dataOff,true);
+  let p=dataOff;
+  for(let cy=0;cy<rows;cy++)for(let cx=0;cx<cols;cx++){const ci=cy*cols+cx,l=cells[ci],e=tableOff+ci*8;
+    if(!l||!l.length){dv.setUint32(e,0,true);dv.setUint32(e+4,0,true);continue}
+    dv.setUint32(e,p-dataOff,true);dv.setUint32(e+4,cellBytes(l),true);
+    for(const r of l){out[p]=r.cls;out[p+1]=r.nameIdx||0;dv.setUint16(p+2,r.poly.length,true);p+=4;
+      for(const q of r.poly){dv.setInt16(p,Math.max(0,Math.min(cell,q[0]-cx*cell)),true);dv.setInt16(p+2,Math.max(0,Math.min(cell,q[1]-cy*cell)),true);p+=4}}}
+  // tabel + blob nama
+  let nb=nTabOff+nTabLen;
+  for(let ci=0;ci<cols*rows;ci++){const list=namesOf[ci],e=nTabOff+ci*8;
+    if(!list||!list.length){dv.setUint32(e,0,true);dv.setUint32(e+4,0,true);continue}
+    const start=nb;out[nb++]=list.length;
+    for(const n of list){out[nb++]=n.length;for(let k=0;k<n.length;k++)out[nb++]=n.charCodeAt(k)}
+    dv.setUint32(e,start,true);dv.setUint32(e+4,nb-start,true)}
+  let pp=placesOff;
+  for(const q of pl){dv.setInt32(pp,q.lat,true);dv.setInt32(pp+4,q.lon,true);out[pp+8]=q.rank;out[pp+9]=q.name.length;pp+=10;for(let k=0;k<q.name.length;k++)out[pp++]=q.name.charCodeAt(k)}
+  const tr=out.length-16;out.set([71,78,77,49],tr);dv.setUint32(tr+4,nTabOff,true);dv.setUint32(tr+8,placesOff,true);dv.setUint16(tr+12,pl.length,true);
+  dv.setUint32(4,out.length,true);
+  return{bytes:out,stats:{names:namesOf.reduce((s,l)=>s+(l?l.length:0),0),places:pl.length,cols,rows,size:out.length,maxCell,records:nRec,tol,passes,dropped,byCls}};}
+function readNames(buf){const dv=new DataView(buf.buffer,buf.byteOffset,buf.byteLength),tr=buf.length-16;
+  if(String.fromCharCode(buf[tr],buf[tr+1],buf[tr+2],buf[tr+3])!=='GNM1')return null;
+  const tab=dv.getUint32(tr+4,true),pOff=dv.getUint32(tr+8,true),nP=dv.getUint16(tr+12,true),cols=dv.getUint16(18,true),rows=dv.getUint16(20,true),cells=[],places=[];
+  const str=(p,n)=>String.fromCharCode(...buf.subarray(p,p+n));
+  for(let ci=0;ci<cols*rows;ci++){const off=dv.getUint32(tab+ci*8,true),len=dv.getUint32(tab+ci*8+4,true);if(!len)continue;let p=off;const c=buf[p++],l=[];for(let i=0;i<c;i++){const n=buf[p++];l.push(str(p,n));p+=n}cells[ci]=l}
+  let p=pOff;for(let i=0;i<nP;i++){const n=buf[p+9];places.push({lat:dv.getInt32(p,true),lon:dv.getInt32(p+4,true),rank:buf[p+8],name:str(p+10,n)});p+=10+n}
+  return{cells,places};}
+function readGmap(buf){const dv=new DataView(buf.buffer,buf.byteOffset,buf.byteLength);
+  if(String.fromCharCode(buf[0],buf[1],buf[2],buf[3])!=='GMP1')throw new Error('bukan GMP1');
+  const oLat=dv.getInt32(8,true),oLon=dv.getInt32(12,true),cell=dv.getUint16(16,true),cols=dv.getUint16(18,true),rows=dv.getUint16(20,true),tO=dv.getUint32(22,true),dO=dv.getUint32(26,true),items=[];
+  for(let cy=0;cy<rows;cy++)for(let cx=0;cx<cols;cx++){const e=tO+(cy*cols+cx)*8,off=dv.getUint32(e,true),len=dv.getUint32(e+4,true);if(!len)continue;
+    let p=dO+off;const end=p+len,bLat=oLat+cy*cell,bLon=oLon+cx*cell;
+    while(p+4<=end){const cls=buf[p],n=dv.getUint16(p+2,true);p+=4;const pts=[];
+      for(let i=0;i<n;i++)pts.push([bLat+dv.getInt16(p+4*i+2,true),bLon+dv.getInt16(p+4*i,true)]);
+      p+=4*n;items.push({cls,pts})}}
+  return{oLat,oLon,cell,cols,rows,items};}
+</script>
+<script>
+const $=id=>document.getElementById(id),logEl=$('log');let result=null;
+const log=t=>{logEl.textContent+=t+'\n';logEl.scrollTop=logEl.scrollHeight};
+const ENDPOINTS=['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter','https://overpass.openstreetmap.fr/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+let epStart=0;const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+$('gps').onclick=()=>navigator.geolocation.getCurrentPosition(p=>{$('lat').value=p.coords.latitude.toFixed(5);$('lon').value=p.coords.longitude.toFixed(5);log('Lokasi HP dipakai.')},()=>log('Gagal ambil lokasi (izin?).'),{enableHighAccuracy:true,timeout:15000});
+// Satu permintaan: coba beberapa server bergantian. "Failed to fetch" biasanya = server sibuk/menolak (galat tanpa header CORS).
+async function overpass(q,tries){let err;
+  for(let a=0;a<tries;a++){const ep=ENDPOINTS[(epStart+a)%ENDPOINTS.length],host=new URL(ep).host;
+    try{const c=new AbortController(),tm=setTimeout(()=>c.abort(),75000);
+      const r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(q),signal:c.signal});clearTimeout(tm);
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const j=await r.json();
+      if(j.remark&&/runtime error|timed out|out of memory/i.test(j.remark))throw new Error('server: '+j.remark.slice(0,50));
+      epStart=(epStart+a)%ENDPOINTS.length;return j}
+    catch(e){err=e;log('  '+host+': '+(e.name==='AbortError'?'timeout':e.message));await sleep(1500*(a+1))}}
+  throw err}
+// Satu blok; bila gagal dipecah jadi 4 sub-blok. optional: bila tetap gagal di ukuran terkecil, dilewati (tidak membatalkan).
+async function fetchBlock(s,w,n,e,mk,add,optional){
+  const bb=`(${s.toFixed(6)},${w.toFixed(6)},${n.toFixed(6)},${e.toFixed(6)})`;
+  try{add(await overpass(mk(bb),4))}
+  catch(err){const hM=(n-s)*MLAT;
+    if(hM<900){if(optional){log('  dilewati: '+err.message);return}throw err}
+    log(`  blok dipecah: ${Math.round(hM)} m -> ${Math.round(hM/2)} m`);
+    const ms=(s+n)/2,mw=(w+e)/2;
+    for(const t of [[s,w,ms,mw],[s,mw,ms,e],[ms,w,n,mw],[ms,mw,n,e]]){await fetchBlock(t[0],t[1],t[2],t[3],mk,add,optional);await sleep(700)}}}
+
+// ===== NAVIGASI: rute (OSRM) -> koridor peta -> blok rute GRT1 di ujung berkas =====
+let NAV=null;
+$('mode').onchange=()=>{const n=$('mode').value==='n';$('navBox').style.display=n?'block':'none';
+  [$('lat').parentElement.parentElement,$('gps'),$('rad').parentElement].forEach(e=>e.style.display=n?'none':'');$('pkRow').style.display=n?'':'none';NAV=null;$('rtinfo').textContent='';initMap()};
+
+// ---- sumber tile (OSM / Carto + API key), disimpan di localStorage ----
+const TK_OSM='https://tile.openstreetmap.org/{z}/{x}/{y}.png',TK_CARTO='https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key={key}';
+let tileL=null;
+function tkLoad(){let o={};try{o=JSON.parse(localStorage.getItem('gm_tiles')||'{}')}catch(e){}let u=o.url||TK_CARTO;if(u.indexOf('{key}')<0||u.indexOf('api_key=')>=0)u=TK_CARTO;   // template lama/rusak (mis. key sudah tertempel, atau api_key=) -> kembali ke bawaan
+  return {src:o.src||'osm',key:o.key||'',url:u}}
+function tkSave(o){try{localStorage.setItem('gm_tiles',JSON.stringify(o))}catch(e){}}
+function tkUI(){const o=tkLoad();$('tkSrc').value=o.src;$('tkKey').value=o.key;$('tkUrl').value=o.url}
+function applyTiles(){
+  if(!LM)return;const o=tkLoad();if(tileL){tileL.remove();tileL=null}
+  if(o.src==='carto'&&o.key){
+    tileL=L.tileLayer(o.url.replace('{key}',encodeURIComponent(o.key)),{subdomains:'abcd',maxZoom:20,attribution:'© OpenStreetMap contributors © CARTO'});
+    tileL.once('tileerror',()=>{$('tkMsg').textContent='Tile Carto gagal dimuat: cek API key / template URL, atau pilih OpenStreetMap.'});
+  }else{
+    tileL=L.tileLayer(TK_OSM,{maxZoom:19,attribution:'© OpenStreetMap'});
+    if(o.src==='carto')$('tkMsg').textContent='API key kosong: sementara memakai OpenStreetMap.';
+  }
+  tileL.addTo(LM)}
+$('tkApply').onclick=()=>{let u=$('tkUrl').value.trim();if(u.indexOf('{key}')<0)u=TK_CARTO;$('tkUrl').value=u;
+  tkSave({src:$('tkSrc').value,key:$('tkKey').value.trim(),url:u});$('tkMsg').textContent='Tersimpan.';applyTiles()};
+tkUI();
+// ---- peta pilih titik (Leaflet + tile OSM): ketuk peta untuk mengisi Asal / Tujuan, lalu rute digambar di sini ----
+let LM=null,pick='to',mk={},rl=null;
+function initMap(){
+  if(typeof L==='undefined'){$('rtinfo').textContent='Peta pilih titik gagal dimuat (butuh internet). Isi lat,lon secara manual.';return}
+  if(LM){setTimeout(()=>LM.invalidateSize(),60);return}
+  LM=L.map('navMap').setView([+$('lat').value||-7.6,+$('lon').value||111.07],12);
+  applyTiles();
+  LM.on('click',e=>{const p=[e.latlng.lat,e.latlng.lng];if($('mode').value==='n')setPt(pick,p,true);else{setPt('c',p);$('lat').value=p[0].toFixed(5);$('lon').value=p[1].toFixed(5)}});setTimeout(()=>LM.invalidateSize(),60)}
+function setPt(w,p,fill){if(!LM)return;
+  if(mk[w])mk[w].setLatLng(p);else mk[w]=L.circleMarker(p,{radius:9,color:'#fff',weight:3,fillColor:w==='to'?'#e03131':w==='c'?'#1c7ed6':'#2f9e44',fillOpacity:1}).addTo(LM).bindTooltip(w==='to'?'Tujuan':w==='c'?'Pusat':'Asal',{permanent:true,direction:'top'});
+  if(fill){$(w).value=p[0].toFixed(5)+','+p[1].toFixed(5);NAV=null;$('rtinfo').textContent='';if(rl){rl.remove();rl=null}}}
+const setPick=w=>{pick=w;$('pkF').textContent='Ketuk peta = Asal'+(w==='from'?' ✓':'');$('pkT').textContent='Ketuk peta = Tujuan'+(w==='to'?' ✓':'')};
+$('pkF').onclick=()=>setPick('from');$('pkT').onclick=()=>setPick('to');
+function showRoute(){if(!LM||!NAV)return;if(rl)rl.remove();rl=L.polyline(NAV.pts.map(q=>q.p),{color:'#1c7ed6',weight:5}).addTo(LM);setPt('from',NAV.from);setPt('to',NAV.to);LM.fitBounds(rl.getBounds(),{padding:[20,20]})}
+['lat','lon'].forEach(id=>$(id).addEventListener('input',()=>{const a=+$('lat').value,b=+$('lon').value;if(LM&&isFinite(a)&&isFinite(b)&&$('lat').value&&$('lon').value){setPt('c',[a,b]);LM.panTo([a,b])}}));
+$('gps').addEventListener('click',()=>setTimeout(()=>{const a=+$('lat').value,b=+$('lon').value;if(LM&&a&&b){setPt('c',[a,b]);LM.setView([a,b],13)}},2500));
+setTimeout(initMap,0);
+const COORD=/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/;
+async function geocode(q){const m=COORD.exec(q);if(m)return[+m[1],+m[2],q];
+  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=id&q='+encodeURIComponent(q));
+  const j=await r.json();if(!j.length)throw new Error('Tempat tidak ditemukan: '+q);log('  '+q+' -> '+j[0].display_name.slice(0,60));return[+j[0].lat,+j[0].lon,q]}
+const hv=(a,b)=>{const x=(b[1]-a[1])*111320*Math.cos((a[0]+b[0])*Math.PI/360),y=(b[0]-a[0])*MLAT;return Math.hypot(x,y)};
+function stepType(t,m){if(t==='depart')return 8;if(t==='arrive')return 7;if(/roundabout|rotary/.test(t))return 6;
+  return{'uturn':5,'right':1,'sharp right':1,'slight right':3,'left':2,'sharp left':2,'slight left':4,'straight':0}[m]??-1}
+async function findRoute(){
+  log('Mencari rute ...');let a;
+  if($('from').value.trim())a=await geocode($('from').value);
+  else a=await new Promise((ok,no)=>navigator.geolocation.getCurrentPosition(p=>ok([p.coords.latitude,p.coords.longitude]),()=>no(new Error('Asal kosong & lokasi HP tidak tersedia')),{enableHighAccuracy:true,timeout:15000}));
+  const b=await geocode($('to').value);
+  const u=x=>`https://router.project-osrm.org/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson&steps=true${x}`;
+  let r=await fetch(u($('notoll').checked?'&exclude=toll':''));let j=await r.json();
+  if(j.code!=='Ok'&&$('notoll').checked){log('  server menolak "hindari tol", mencoba tanpa filter (periksa sendiri rutenya)');j=await(await fetch(u(''))).json()}
+  if(j.code!=='Ok')throw new Error('Rute gagal: '+(j.message||j.code));
+  const rt=j.routes[0],raw=rt.geometry.coordinates.map(c=>[c[1],c[0]]);
+  const mans=[];for(const s of rt.legs.flatMap(l=>l.steps)){const ty=stepType(s.maneuver.type,s.maneuver.modifier||'');if(ty<0)continue;mans.push({ty,loc:[s.maneuver.location[1],s.maneuver.location[0]],name:ASCII(s.name).slice(0,23)})}
+  // rapatkan titik: buang yang < 8 m dari titik terakhir, simpan titik belokan
+  const manIdx=new Set(),near=[];let fi=0;
+  for(const m of mans){let best=-1,bd=1e18;for(let i=fi;i<raw.length;i++){const d=hv(raw[i],m.loc);if(d<bd){bd=d;best=i}if(d>bd+500&&bd<30)break}m.raw=Math.max(best,fi);fi=m.raw;manIdx.add(m.raw)}
+  const pts=[],map=new Map();let cum=0;
+  raw.forEach((p,i)=>{if(!pts.length){pts.push({p,cum:0});map.set(i,0);return}
+    const last=pts[pts.length-1],d=hv(last.p,p);if(d>=8||manIdx.has(i)||i===raw.length-1){cum+=d;pts.push({p,cum});map.set(i,pts.length-1)}else map.set(i,pts.length-1)});
+  const steps=mans.map(m=>({ty:m.ty,idx:map.get(m.raw),cum:pts[map.get(m.raw)].cum,name:m.name}));
+  if(pts.length>14000)throw new Error('Rute terlalu panjang ('+pts.length+' titik)');
+  NAV={pts,steps,from:a,to:b,len:cum};
+  $('rtinfo').textContent=`Rute ${(cum/1000).toFixed(1)} km, ${pts.length} titik, ${steps.length} instruksi (~${Math.round(rt.duration/60)} mnt mobil)`;log($('rtinfo').textContent);showRoute()}
+['from','to','notoll'].forEach(id=>$(id).oninput=()=>{NAV=null;$('rtinfo').textContent=''});
+$('rt').onclick=async()=>{$('rt').disabled=true;logEl.textContent='';try{await findRoute()}catch(e){log('GAGAL: '+e.message)}finally{$('rt').disabled=false}};
+// Rencana koridor: pusat/radius persegi yang melingkupi rute + set blok 3 km yang dilalui (sama dengan rumus blok di tombol Buat paket)
+function corridor(pts,buf){const step=3000;let la0=1e9,la1=-1e9,lo0=1e9,lo1=-1e9;for(const q of pts){const p=q.p;la0=Math.min(la0,p[0]);la1=Math.max(la1,p[0]);lo0=Math.min(lo0,p[1]);lo1=Math.max(lo1,p[1])}
+  const latC=(la0+la1)/2,lonC=(lo0+lo1)/2,mLon=111320*Math.cos(latC*Math.PI/180);
+  const R=Math.max((la1-la0)*MLAT,(lo1-lo0)*mLon)/2+buf+step;
+  if(2*R/1000>199)throw new Error('Rute terlalu jauh untuk satu peta (maks ~190 km bentangan).');
+  const s0=latC-R/MLAT,w0=lonC-R/mLon,nA=Math.ceil(2*R/step),set=new Set(),mk=(la,lo)=>{const i=Math.floor((la-s0)*MLAT/step),j=Math.floor((lo-w0)*mLon/step);if(i>=0&&j>=0&&i<nA&&j<nA)set.add(i+','+j)};
+  for(let k=1;k<pts.length;k++){const a=pts[k-1].p,b=pts[k].p,n=Math.max(1,Math.ceil(hv(a,b)/400));
+    for(let t=0;t<=n;t++){const la=a[0]+(b[0]-a[0])*t/n,lo=a[1]+(b[1]-a[1])*t/n;
+      for(const dy of[-buf,0,buf])for(const dx of[-buf,0,buf])mk(la+dy/MLAT,lo+dx/mLon)}}
+  return{latC,lonC,R,set}}
+function withRoute(bytes){const N=NAV.pts.length,S=NAV.steps.length,out=new Uint8Array(bytes.length+N*12+S*32+16),dv=new DataView(out.buffer);out.set(bytes,0);let p=bytes.length;
+  for(const q of NAV.pts){dv.setInt32(p,Math.round(q.p[0]*1e6),true);dv.setInt32(p+4,Math.round(q.p[1]*1e6),true);dv.setUint32(p+8,Math.round(q.cum),true);p+=12}
+  for(const s of NAV.steps){dv.setUint16(p,s.idx,true);out[p+2]=s.ty;dv.setUint32(p+4,Math.round(s.cum),true);for(let i=0;i<23&&i<s.name.length;i++)out[p+8+i]=s.name.charCodeAt(i);p+=32}
+  out.set([71,82,84,49],p);dv.setUint32(p+4,bytes.length,true);dv.setUint32(p+8,N,true);dv.setUint16(p+12,S,true);return out}
+$('go').onclick=async()=>{
+  logEl.textContent='';result=null;$('dl').style.display=$('up').style.display=$('cv').style.display='none';$('go').disabled=true;
+  try{
+    let latC=+$('lat').value,lonC=+$('lon').value,Rk=+$('rad').value;const cell=+$('cell').value,tol=+$('tol').value;let CORR=null;
+    if($('mode').value==='n'){if(!NAV)await findRoute();const pl=corridor(NAV.pts,+$('buf').value);latC=pl.latC;lonC=pl.lonC;Rk=pl.R/1000;CORR=pl.set;log(`Koridor: ${CORR.size} blok 3 km`)}
+    const o={track:$('trk').checked,paths:$('pth').checked,streams:$('stm').checked,ditch:$('dit').checked,areas:$('ar').checked,farm:$('fm').checked,built:$('bt').checked};
+    const mLon=111320*Math.cos(latC*Math.PI/180),R=Rk*1000;
+    const hw='motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified|residential|living_street|road|service'+(o.track?'|track':'')+(o.paths?'|path|footway|cycleway|bridleway|pedestrian':'');
+    const ww='river|canal'+(o.streams?'|stream':'')+(o.ditch?'|drain|ditch':'');
+    const step=3000,nA=Math.ceil(2*R/step),nB=nA,ways=new Map(),TOT=CORR?CORR.size:nA*nB;
+    if(TOT>36)log(`Radius besar: ${nA*nB} blok. Bisa lama / dibatasi server. Disarankan radius 10 km atau kurang.`);
+    const s0=latC-R/MLAT,w0=lonC-R/mLon;let k=0;
+    const RANK={city:4,town:3,village:2,suburb:2,neighbourhood:2,quarter:2,hamlet:1,isolated_dwelling:1},places=new Map();
+    const add=d=>{for(const el of d.elements||[]){
+      if(el.type==='way'&&el.geometry&&el.geometry.length>1){const c=classOf(el.tags||{},o);if(c>=0&&!ways.has(el.id))ways.set(el.id,{cls:c,name:(el.tags||{}).name||'',pts:el.geometry.map(g=>[g.lat,g.lon])})}
+      else if(el.type==='node'&&el.tags&&el.tags.place&&el.tags.name&&RANK[el.tags.place]&&!places.has(el.id))places.set(el.id,{lat:el.lat,lon:el.lon,rank:RANK[el.tags.place],name:el.tags.name})}};
+    const addArea=d=>{for(const el of d.elements||[]){const t=el.tags||{},c=areaClass(t,o);if(c<0)continue;
+      if(el.type==='way'&&el.geometry&&el.geometry.length>3){const g=el.geometry;if(g[0].lat===g[g.length-1].lat&&g[0].lon===g[g.length-1].lon&&!ways.has('w'+el.id))ways.set('w'+el.id,{cls:c,poly:true,pts:g.map(q=>[q.lat,q.lon])})}
+      else if(el.type==='relation'&&el.members){const outers=el.members.filter(m=>m.type==='way'&&m.role==='outer'&&m.geometry).map(m=>m.geometry.map(q=>[q.lat,q.lon]));
+        assembleRings(outers).forEach((r,i)=>{const key='r'+el.id+':'+i;if(!ways.has(key))ways.set(key,{cls:c,poly:true,pts:r})})}}};
+    for(let i=0;i<nA;i++)for(let j=0;j<nB;j++){if(CORR&&!CORR.has(i+','+j))continue;k++;
+      const s=s0+i*step/MLAT,n=s0+Math.min((i+1)*step,2*R)/MLAT,w=w0+j*step/mLon,e=w0+Math.min((j+1)*step,2*R)/mLon;
+      log(`Blok ${k}/${TOT} ...`);
+      await fetchBlock(s,w,n,e,bb=>`[out:json][timeout:50];(way["highway"~"^(${hw})$"]${bb};way["waterway"~"^(${ww})$"]${bb};way["railway"="rail"]${bb};node["place"~"^(city|town|village|hamlet|suburb|neighbourhood|quarter|isolated_dwelling)$"]${bb};);out geom qt;`,add,false);
+      if(o.areas){log('  area ...');await sleep(500);
+        await fetchBlock(s,w,n,e,bb=>`[out:json][timeout:60];(way["natural"~"^(water|wood|scrub|grassland)$"]${bb};way["landuse"~"^(forest|reservoir|basin|grass|meadow|farmland|orchard|vineyard|residential|commercial|industrial|retail|recreation_ground|village_green|allotments)$"]${bb};way["leisure"~"^(park|garden|pitch|golf_course|nature_reserve|playground)$"]${bb};way["waterway"="riverbank"]${bb};relation["type"="multipolygon"]["natural"~"^(water|wood)$"]${bb};relation["type"="multipolygon"]["landuse"~"^(forest|reservoir|basin|farmland|meadow|grass)$"]${bb};relation["type"="multipolygon"]["waterway"="riverbank"]${bb};);out geom qt;`,addArea,true)}
+      log(`  total jalur: ${ways.size}`);await sleep(700);}
+    log('Menyusun paket ...');await new Promise(r=>setTimeout(r,30));
+    const res=buildGmap([...ways.values()],{latC,lonC,radiusM:R,cellE6:cell,tolM:tol},[...places.values()]);result=res.bytes;result[30]=+$('sty').value;const st=res.stats;if(CORR){result=withRoute(result);log('Rute ikut dikemas: '+NAV.pts.length+' titik, '+NAV.steps.length+' instruksi.')}
+    log(`Selesai: ${(st.size/1024).toFixed(0)} KB, ${st.cols}x${st.rows} sel, sel terbesar ${st.maxCell} B (batas 8000), simplifikasi ${st.tol.toFixed(1)} m`);
+    log(`Nama jalan: ${st.names} | tempat: ${st.places}`);
+    log(`Segmen per kelas [tol,primer,sekunder,tersier,permukiman,service,sungai,rel,A-air,A-hutan,A-hijau,A-terbangun]: ${st.byCls.join(', ')}`);
+    if(st.dropped)log(`PERINGATAN: ${st.dropped} jalur kecil dibuang di sel yang terlalu padat. Pakai sel 0,5 km atau radius lebih kecil.`);
+    const sd=st.size/1048576;if(sd>30)log('Catatan: berkas besar, unggah via WiFi bisa lama.');
+    draw();$('dl').style.display=$('up').style.display='block';
+  }catch(e){log('GAGAL: '+e.message+'\nSemua server Overpass menolak. Coba: WiFi lain / matikan VPN & DNS pribadi, kurangi radius (mis. 5 km), matikan opsi path & parit, atau ulangi beberapa menit lagi.')}finally{$('go').disabled=false}};
+const STY=[['#F1EFE8','#E892A2','#F9B26B','#F6E27A','#8C9299','#B8BDC2','#FFFFFF','#AAD3DF','#495057','#1C7ED6','#FFFFFF','#E03131','#212529','#ADD19E','#CDEBB0','#E0DFDF'],['#1E252E','#D9667A','#E0A050','#C9B84A','#0F141A','#3A4552','#56657A','#1F3F57','#7A8794','#3DA5FF','#0F141A','#FF5A5A','#F2F5F7','#1F3A2A','#24372C','#2A323C'],['#F7F7F2','#E03131','#F08C00','#FAB005','#343A40','#868E96','#FFFFFF','#74B9E8','#212529','#1C7ED6','#FFFFFF','#E03131','#000000','#8FCB7F','#C3E8A8','#DEDDDD'],['#EFEBDD','#C8553D','#E0A050','#F2D98A','#7A6A55','#A0714D','#FFFDF5','#9CCFE6','#5C534A','#1C7ED6','#FFFFFF','#E03131','#2B2A26','#9CC98A','#D5E8B8','#E3DCCB'],['#F3EFE6','#E8667A','#F5A35C','#C0654A','#B5A58F','#DDD3C3','#63B96B','#9DCBE6','#8A8F96','#1C7ED6','#FFFFFF','#E03131','#3B4350','#A9D69B','#BDE5A3','#EADFCF']];
+const PRESET=[[1,0,1,0,1,1,1],[1,0,1,0,1,1,1],[1,0,0,0,1,0,0],[1,1,1,0,1,1,0],[1,0,1,0,1,1,1]];
+const IDS=['trk','pth','stm','dit','ar','fm','bt'];
+$('sty').onchange=()=>{const s=+$('sty').value;IDS.forEach((id,i)=>$(id).checked=!!PRESET[s][i]);if(result){result[30]=s;draw()}};
+function draw(){const g=readGmap(result),cv=$('cv'),c=cv.getContext('2d'),P=STY[result[30]]||STY[0];cv.style.display='block';c.fillStyle=P[0];c.fillRect(0,0,560,560);
+  const H=g.rows*g.cell,Wd=g.cols*g.cell,sc=Math.min(560/Wd,560/H),W=[7,6,5.5,5,4,2.2,3.2,1.5],FC=[1,2,3,6,result[30]===4?10:6,5,7,8],CS=[4,4,4,4,5],fills={8:7,9:13,10:14,11:15};
+  const X=q=>(q[1]-g.oLon)*sc,Y=q=>560-(q[0]-g.oLat)*sc;c.lineCap=c.lineJoin='round';
+  for(const cl of [11,10,9,8])for(const it of g.items){if(it.cls!==cl)continue;c.fillStyle=P[fills[cl]];c.beginPath();it.pts.forEach((q,i)=>{i?c.lineTo(X(q),Y(q)):c.moveTo(X(q),Y(q))});c.closePath();c.fill()}
+  const path=pts=>{c.beginPath();c.moveTo(X(pts[0]),Y(pts[0]));for(let i=1;i<pts.length-1;i++){const a=pts[i],b=pts[i+1];c.quadraticCurveTo(X(a),Y(a),(X(a)+X(b))/2,(Y(a)+Y(b))/2)}const z=pts[pts.length-1];c.lineTo(X(z),Y(z));c.stroke()};
+  const run=(list,casing)=>{for(const cl of list)for(const it of g.items){if(it.cls!==cl||it.pts.length<2)continue;
+    if(casing){if(W[cl]<2.5)continue;c.strokeStyle=P[CS[cl]];c.lineWidth=W[cl]+2}else{c.strokeStyle=P[(cl===3||cl===4)&&W[cl]<2.5?(cl===3?4:5):FC[cl]];c.lineWidth=W[cl]}path(it.pts)}};
+  run([6,7,5]);run([4,3,2,1,0],true);run([4,3]);run([2,1,0]);
+  if(NAV&&$('mode').value==='n'){c.lineWidth=7;c.strokeStyle=P[10];c.beginPath();NAV.pts.forEach((q,i)=>{const x=(q.p[1]*1e6-g.oLon)*sc,y=560-(q.p[0]*1e6-g.oLat)*sc;i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();c.lineWidth=4;c.strokeStyle=P[9];c.stroke()}}
+$('dl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([result],{type:'application/octet-stream'}));a.download='map.gmap';a.click()};
+$('up').onclick=async()=>{log('Mengirim ke 192.168.4.1 ... (HP harus tersambung ke WiFi GESITS-MAP, buka halaman ini dari berkas lokal / http)');
+  try{const fd=new FormData();fd.append('f',new Blob([result]),'map.gmap');const r=await fetch('http://192.168.4.1/upload',{method:'POST',body:fd});log('ESP32: '+await r.text())}
+  catch(e){log('Gagal kirim langsung ('+e.message+'). Unduh berkasnya lalu unggah lewat http://192.168.4.1')}};
+</script><script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))</script>
+</body></html>
