@@ -1,0 +1,6 @@
+{
+  "name": "GMAP Maker",
+  "description": "Buat paket peta GMAP dari OpenStreetMap untuk GESITS Map Unit",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

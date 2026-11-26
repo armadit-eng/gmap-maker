@@ -1,0 +1,45 @@
+<resources>
+    <string name="app_name">GMAP Maker</string>
+    <string name="header_title">Pembuat Paket Peta GMAP (jalan lengkap)</string>
+    <string name="label_lat">Lintang (lat)</string>
+    <string name="label_lon">Bujur (lon)</string>
+    <string name="btn_gps">Pakai lokasi HP</string>
+    <string name="label_mode">Mode</string>
+    <string name="mode_radius">Radius dari satu titik</string>
+    <string name="mode_nav">Navigasi (rute asal → tujuan)</string>
+    <string name="pick_origin">Ketuk peta = Asal</string>
+    <string name="pick_origin_active">Ketuk peta = Asal ✓</string>
+    <string name="pick_dest">Ketuk peta = Tujuan</string>
+    <string name="pick_dest_active">Ketuk peta = Tujuan ✓</string>
+    <string name="hint_radius_map">Mode Radius: ketuk peta untuk memilih titik pusat.</string>
+    <string name="hint_nav_map">Mode Navigasi: pilih tombol Asal/Tujuan lalu ketuk peta.</string>
+    <string name="tile_settings_title">Sumber tile peta pilih titik (API key Carto)</string>
+    <string name="tile_source_label">Sumber</string>
+    <string name="tile_source_osm">OpenStreetMap (tanpa key)</string>
+    <string name="tile_source_carto">Carto Voyager (butuh API key)</string>
+    <string name="tile_key_label">API key Carto</string>
+    <string name="tile_key_hint">tempel API key dari carto.com/basemaps</string>
+    <string name="tile_url_label">Template URL tile (biarkan tulisan {key} apa adanya; jangan diganti dengan key)</string>
+    <string name="tile_apply_btn">Terapkan &amp; simpan</string>
+    <string name="tile_default_msg">Kunci hanya disimpan di HP ini. Hanya memengaruhi tampilan peta pilih titik; warna file .gmap diatur lewat Tipe peta.</string>
+    <string name="label_from">Asal (nama tempat atau lat,lon; kosong = lokasi HP)</string>
+    <string name="label_to">Tujuan (nama tempat atau lat,lon)</string>
+    <string name="label_notoll">Hindari tol</string>
+    <string name="label_corridor_width">Lebar peta kiri-kanan rute</string>
+    <string name="btn_find_route">Cari rute</string>
+    <string name="label_style">Tipe peta (gaya warna + isi lapisan)</string>
+    <string name="label_radius_km">Radius (km)</string>
+    <string name="label_cell_size">Ukuran sel</string>
+    <string name="label_tolerance">Simplifikasi garis (meter) — makin kecil makin detail, berkas makin besar</string>
+    <string name="opt_track">Jalan tanah / track</string>
+    <string name="opt_paths">Jalan setapak (path, footway) — gang sempit</string>
+    <string name="opt_streams">Sungai kecil (stream)</string>
+    <string name="opt_ditch">Parit / saluran irigasi</string>
+    <string name="opt_areas">Area berwarna: air, hutan, taman</string>
+    <string name="opt_farm">Area sawah / ladang</string>
+    <string name="opt_built">Area permukiman / industri (abu-abu)</string>
+    <string name="btn_generate">Buat paket peta</string>
+    <string name="btn_download">Unduh map.gmap</string>
+    <string name="btn_upload">Kirim langsung ke ESP32 (WiFi GESITS-MAP)</string>
+    <string name="footer_attribution">Data: OpenStreetMap contributors (ODbL), tile pilih titik: © CARTO. Unggah manual: sambung ke WiFi GESITS-MAP lalu buka http://192.168.4.1 dan pilih berkas map.gmap.</string>
+</resources>
