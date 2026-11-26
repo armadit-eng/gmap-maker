@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.map
 
 enum class TileSource(val id: String, val label: String) {
     OSM("osm", "OpenStreetMap (tanpa key)"),
+    OSM_HOT("osm_hot", "OSM Humanitarian (tanpa key)"),
     CARTO("carto", "Carto Voyager (butuh API key)")
 }
 
@@ -19,6 +20,7 @@ data class TileSettings(
 ) {
     companion object {
         const val OSM_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        const val OSM_HOT_TEMPLATE = "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
         const val DEFAULT_CARTO_TEMPLATE =
             "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key={key}"
 
@@ -42,7 +44,11 @@ class TileSettingsRepository(private val context: Context) {
 
     val settingsFlow: Flow<TileSettings> = context.tileDataStore.data.map { prefs ->
         val srcId = prefs[keySrc] ?: TileSource.OSM.id
-        val source = if (srcId == TileSource.CARTO.id) TileSource.CARTO else TileSource.OSM
+        val source = when (srcId) {
+            TileSource.CARTO.id -> TileSource.CARTO
+            TileSource.OSM_HOT.id -> TileSource.OSM_HOT
+            else -> TileSource.OSM
+        }
         val cartoKey = prefs[keyCarto].orEmpty()
         val url = TileSettings.sanitizeTemplate(prefs[keyUrl])
         TileSettings(source = source, cartoKey = cartoKey, urlTemplate = url)

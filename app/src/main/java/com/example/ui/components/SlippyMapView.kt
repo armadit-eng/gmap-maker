@@ -272,25 +272,37 @@ fun SlippyMapView(
             val maxTy = min(numTiles - 1, floor((topLeftY + h) / scaledTilePx).toInt())
 
             val subdomains = arrayOf("a", "b", "c", "d")
+            val hotSubdomains = arrayOf("a", "b", "c")
             val useCarto = tileSettings.source == TileSource.CARTO && tileSettings.cartoKey.isNotBlank()
+            val useHot = tileSettings.source == TileSource.OSM_HOT
 
             for (ty in minTy..maxTy) {
                 for (tx in minTx..maxTx) {
                     val wrappedTx = ((tx % numTiles) + numTiles) % numTiles
                     val sub = subdomains[(wrappedTx + ty) and 3]
-                    val url = if (useCarto) {
-                        val encodedKey = URLEncoder.encode(tileSettings.cartoKey, "UTF-8")
-                        tileSettings.urlTemplate
-                            .replace("{s}", sub)
-                            .replace("{z}", intZoom.toString())
-                            .replace("{x}", wrappedTx.toString())
-                            .replace("{y}", ty.toString())
-                            .replace("{r}", "@2x")
-                            .replace("{key}", encodedKey)
-                    } else {
-                        "https://tile.openstreetmap.org/$intZoom/$wrappedTx/$ty.png"
+                    val url = when {
+                        useCarto -> {
+                            val encodedKey = URLEncoder.encode(tileSettings.cartoKey, "UTF-8")
+                            tileSettings.urlTemplate
+                                .replace("{s}", sub)
+                                .replace("{z}", intZoom.toString())
+                                .replace("{x}", wrappedTx.toString())
+                                .replace("{y}", ty.toString())
+                                .replace("{r}", "@2x")
+                                .replace("{key}", encodedKey)
+                        }
+                        useHot -> {
+                            val hotSub = hotSubdomains[(wrappedTx + ty) % hotSubdomains.size]
+                            "https://$hotSub.tile.openstreetmap.fr/hot/$intZoom/$wrappedTx/$ty.png"
+                        }
+                        else -> "https://tile.openstreetmap.org/$intZoom/$wrappedTx/$ty.png"
                     }
-                    val cacheKey = "${if (useCarto) "carto" else "osm"}_${intZoom}_${wrappedTx}_${ty}_$tick".substringBeforeLast("_")
+                    val prefix = when {
+                        useCarto -> "carto"
+                        useHot -> "osm_hot"
+                        else -> "osm"
+                    }
+                    val cacheKey = "${prefix}_${intZoom}_${wrappedTx}_${ty}_$tick".substringBeforeLast("_")
                     val left = (tx * scaledTilePx - topLeftX).roundToInt()
                     val top = (ty * scaledTilePx - topLeftY).roundToInt()
                     val right = ((tx + 1) * scaledTilePx - topLeftX).roundToInt()
@@ -405,10 +417,12 @@ fun SlippyMapView(
                 .align(Alignment.BottomEnd)
                 .padding(6.dp)
         ) {
-            val attr = if (tileSettings.source == TileSource.CARTO && tileSettings.cartoKey.isNotBlank()) {
-                "© OpenStreetMap © CARTO"
-            } else {
-                "© OpenStreetMap"
+            val attr = when {
+                tileSettings.source == TileSource.CARTO && tileSettings.cartoKey.isNotBlank() ->
+                    "© OpenStreetMap © CARTO"
+                tileSettings.source == TileSource.OSM_HOT ->
+                    "© OpenStreetMap • HOT"
+                else -> "© OpenStreetMap"
             }
             Text(
                 text = attr,

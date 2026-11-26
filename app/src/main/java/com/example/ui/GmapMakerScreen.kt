@@ -348,19 +348,23 @@ fun GmapMakerScreen(
                                     onSelect = { tileSrcDraft = it },
                                     testTag = "tile_source_dropdown"
                                 )
-                                GmapTextField(
-                                    value = tileKeyDraft,
-                                    onValueChange = { tileKeyDraft = it },
-                                    label = stringResource(R.string.tile_key_label),
-                                    placeholder = stringResource(R.string.tile_key_hint),
-                                    testTag = "tile_key_input"
-                                )
-                                GmapTextField(
-                                    value = tileUrlDraft,
-                                    onValueChange = { tileUrlDraft = it },
-                                    label = stringResource(R.string.tile_url_label),
-                                    testTag = "tile_url_input"
-                                )
+                                AnimatedVisibility(visible = tileSrcDraft == TileSource.CARTO) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        GmapTextField(
+                                            value = tileKeyDraft,
+                                            onValueChange = { tileKeyDraft = it },
+                                            label = stringResource(R.string.tile_key_label),
+                                            placeholder = stringResource(R.string.tile_key_hint),
+                                            testTag = "tile_key_input"
+                                        )
+                                        GmapTextField(
+                                            value = tileUrlDraft,
+                                            onValueChange = { tileUrlDraft = it },
+                                            label = stringResource(R.string.tile_url_label),
+                                            testTag = "tile_url_input"
+                                        )
+                                    }
+                                }
                                 SecondaryActionButton(
                                     text = stringResource(R.string.tile_apply_btn),
                                     onClick = {

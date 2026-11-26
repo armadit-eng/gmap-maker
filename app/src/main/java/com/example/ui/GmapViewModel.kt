@@ -256,10 +256,14 @@ class GmapViewModel(application: Application) : AndroidViewModel(application) {
                     urlTemplate = urlTemplate
                 )
             )
-            val msg = if (saved.source == TileSource.CARTO && saved.cartoKey.isBlank()) {
-                "API key kosong: sementara memakai OpenStreetMap."
-            } else {
-                "Tersimpan."
+            val msg = when {
+                saved.source == TileSource.CARTO && saved.cartoKey.isBlank() ->
+                    "API key kosong: sementara memakai OpenStreetMap."
+                saved.source == TileSource.OSM_HOT ->
+                    "Tersimpan (OSM Humanitarian)."
+                saved.source == TileSource.OSM ->
+                    "Tersimpan (OpenStreetMap)."
+                else -> "Tersimpan."
             }
             _uiState.update { it.copy(tileSettings = saved, tileMessage = msg) }
         }
